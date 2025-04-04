@@ -470,6 +470,11 @@ type OperatingSystem struct {
 
 	// Codename is the codename of a specific release (e.g. "buster" for debian 10)
 	Codename string `gorm:"column:codename;index,collate:NOCASE"`
+
+	// VariantID is an operating system variant like "eus" for RHEL Extended Update Support
+	// or "lts" for Ubuntu Long Term Support or LTSS for SUSE Linux Long Term Service Pack
+	// or "rt" for Red Hat Real Time
+	VariantID string `gorm:"column:variant_id;index,collate:NOCASE"`
 }
 
 func (o *OperatingSystem) VersionNumber() string {

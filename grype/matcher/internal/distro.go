@@ -36,7 +36,7 @@ func MatchPackageByDistro(provider vulnerability.Provider, p pkg.Package, upstre
 	vulns, err := provider.FindVulnerabilities(
 		search.ByPackageName(p.Name),
 		search.ByDistro(*p.Distro),
-		onlyQualifiedPackages(p),
+		OnlyQualifiedPackages(p),
 		onlyVulnerableVersions(verObj),
 	)
 	if err != nil {

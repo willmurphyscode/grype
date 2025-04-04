@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/anchore/grype/grype/distro"
+
 	"github.com/anchore/grype/grype/match"
 	"github.com/anchore/grype/grype/matcher/internal"
 	"github.com/anchore/grype/grype/pkg"
@@ -11,8 +13,7 @@ import (
 	syftPkg "github.com/anchore/syft/syft/pkg"
 )
 
-type Matcher struct {
-}
+type Matcher struct{}
 
 func (m *Matcher) PackageTypes() []syftPkg.Type {
 	return []syftPkg.Type{syftPkg.RpmPkg}
@@ -22,8 +23,32 @@ func (m *Matcher) Type() match.MatcherType {
 	return match.RpmMatcher
 }
 
+func getDisclosureDistro(d *distro.Distro) *distro.Distro {
+	if d == nil {
+		return nil
+	}
+	if d.VariantID == "eus" && d.Type == distro.RedHat {
+		version := d.Version
+		// RHEL uses point versions for EUS, but not really for main RHEL
+		if strings.Contains(version, ".") {
+			version = strings.Split(version, ".")[0]
+		}
+		result, err := distro.New(distro.RedHat, version, "", d.IDLike...)
+		if err != nil {
+			return nil // TODO: this is pretty unexpected
+		}
+		return result
+	}
+	return nil
+}
+
 //nolint:funlen
 func (m *Matcher) Match(store vulnerability.Provider, p pkg.Package) ([]match.Match, []match.IgnoredMatch, error) {
+	disclosureDistro := getDisclosureDistro(p.Distro)
+	if disclosureDistro != nil {
+		return m.matchRHELVariant(store, p, disclosureDistro)
+	}
+
 	matches := make([]match.Match, 0)
 
 	// let's match with a synthetic package that doesn't exist. We will create a new

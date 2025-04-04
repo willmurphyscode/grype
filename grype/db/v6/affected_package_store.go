@@ -102,6 +102,9 @@ type OSSpecifier struct {
 
 	// LabelVersion is a string that represents a floating version (e.g. "edge" or "unstable") or is the CODENAME field in /etc/os-release (e.g. "wheezy" for debian 7)
 	LabelVersion string
+
+	// VariantID is a string identifying a distro-specific variant, like "eus" for RHEL Extended Update Support
+	VariantID string
 }
 
 func (d *OSSpecifier) String() string {
@@ -649,13 +652,17 @@ func (s *affectedPackageStore) searchForDistroVersionVariants(query *gorm.DB, d 
 		return nil, nil
 	}
 
-	if d.MajorVersion == "" && d.MinorVersion == "" {
+	if d.MajorVersion == "" && d.MinorVersion == "" && d.VariantID == "" {
 		return handleQuery(query, "name and codename only")
 	}
 
 	// search by the most specific criteria first, then fallback
 	d.MajorVersion = strings.TrimPrefix(d.MajorVersion, "0")
 	d.MinorVersion = strings.TrimPrefix(d.MinorVersion, "0")
+
+	if d.VariantID != "" {
+		query = query.Where("variant_id = ?", d.VariantID)
+	}
 
 	var result []OperatingSystem
 	var err error

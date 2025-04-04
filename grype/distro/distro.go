@@ -11,10 +11,11 @@ import (
 
 // Distro represents a Linux Distribution.
 type Distro struct {
-	Type     Type
-	Version  string
-	Codename string
-	IDLike   []string
+	Type      Type
+	Version   string
+	Codename  string
+	IDLike    []string
+	VariantID string // Is this like "Extended Update Support" (EUS) or "Long Term Support" (LTS) or something?
 
 	// fields populated in the constructor
 
@@ -79,7 +80,12 @@ func NewFromRelease(release linux.Release) (*Distro, error) {
 		selectedVersion = release.VersionID
 	}
 
-	return New(t, selectedVersion, release.VersionCodename, release.IDLike...)
+	result, err := New(t, selectedVersion, release.VersionCodename, release.IDLike...)
+	if err != nil {
+		return nil, err
+	}
+	result.VariantID = release.VariantID
+	return result, nil
 }
 
 func (d Distro) Name() string {

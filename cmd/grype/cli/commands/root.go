@@ -167,7 +167,6 @@ func runGrype(app clio.Application, opts *options.Grype, userInput string) (errs
 			return nil
 		},
 	)
-
 	if err != nil {
 		return err
 	}
@@ -247,9 +246,18 @@ func applyDistroHint(pkgs []pkg.Package, context *pkg.Context, opts *options.Gry
 		split := strings.Split(opts.Distro, ":")
 		d := split[0]
 		v := ""
+		flavor := ""
 		if len(split) > 1 {
 			v = split[1]
 		}
+		if strings.Contains(d, "-") {
+			parts := strings.Split(d, "-")
+			if len(parts) > 1 && parts[1] == "eus" || parts[1] == "lts" {
+				d = parts[0]
+				flavor = parts[1]
+			}
+		}
+
 		context.Distro = &linux.Release{
 			PrettyName: d,
 			Name:       d,
@@ -259,6 +267,7 @@ func applyDistroHint(pkgs []pkg.Package, context *pkg.Context, opts *options.Gry
 			},
 			Version:   v,
 			VersionID: v,
+			VariantID: flavor,
 		}
 	}
 

@@ -83,7 +83,7 @@ func MatchPackageByCPEs(provider vulnerability.Provider, p pkg.Package, upstream
 		vulns, err := provider.FindVulnerabilities(
 			search.ByCPE(c),
 			onlyVulnerableTargets(p),
-			onlyQualifiedPackages(p),
+			OnlyQualifiedPackages(p),
 			onlyVulnerableVersions(verObj),
 			onlyNonWithdrawnVulnerabilities(),
 		)
@@ -112,7 +112,6 @@ func transformJvmVersion(searchVersion, updateCpeField string) string {
 
 func addNewMatch(matchesByFingerprint map[match.Fingerprint]match.Match, vuln vulnerability.Vulnerability, p pkg.Package, searchVersion version.Version, upstreamMatcher match.MatcherType, searchedByCPE cpe.CPE) {
 	candidateMatch := match.Match{
-
 		Vulnerability: vuln,
 		Package:       p,
 	}
@@ -228,7 +227,7 @@ func toMatches(matchesByFingerprint map[match.Fingerprint]match.Match) (matches 
 
 // cpesToString receives one or more CPEs and stringifies them
 func cpesToString(cpes []cpe.CPE) []string {
-	var strs = make([]string, len(cpes))
+	strs := make([]string, len(cpes))
 	for idx, c := range cpes {
 		strs[idx] = c.Attributes.BindToFmtString()
 	}

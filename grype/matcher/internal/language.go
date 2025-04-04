@@ -47,7 +47,7 @@ func MatchPackageByEcosystemPackageName(provider vulnerability.Provider, p pkg.P
 	vulns, err := provider.FindVulnerabilities(
 		search.ByEcosystem(p.Language, p.Type),
 		search.ByPackageName(packageName),
-		onlyQualifiedPackages(p),
+		OnlyQualifiedPackages(p),
 		onlyVulnerableVersions(verObj),
 		onlyNonWithdrawnVulnerabilities(),
 	)
