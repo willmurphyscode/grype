@@ -1,9 +1,12 @@
 package rpm
 
 import (
+	"errors"
+	"regexp"
+	"strconv"
+
 	"github.com/anchore/grype/grype/distro"
 	"github.com/anchore/grype/grype/match"
-	"github.com/anchore/grype/grype/matcher/internal"
 	"github.com/anchore/grype/grype/pkg"
 	"github.com/anchore/grype/grype/search"
 	"github.com/anchore/grype/grype/version"
@@ -20,7 +23,7 @@ func (m *Matcher) matchRHELVariant(store vulnerability.Provider, p pkg.Package, 
 	disclosures, err := store.FindVulnerabilities(
 		search.ByPackageName(p.Name),
 		search.ByDistro(*dislosureDistro),
-		internal.OnlyQualifiedPackages(p),
+		// internal.OnlyQualifiedPackages(p), // TODO: figure out how to deal with modularity
 	)
 	if err != nil {
 		return nil, nil, err
@@ -30,7 +33,7 @@ func (m *Matcher) matchRHELVariant(store vulnerability.Provider, p pkg.Package, 
 	advisories, err := store.FindVulnerabilities(
 		search.ByPackageName(p.Name),
 		search.ByDistro(*p.Distro),
-		internal.OnlyQualifiedPackages(p),
+		// internal.OnlyQualifiedPackages(p),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -53,29 +56,102 @@ func (m *Matcher) matchRHELVariant(store vulnerability.Provider, p pkg.Package, 
 		return nil, nil, err
 	}
 
+	distroMajorVersion, err := strconv.Atoi(p.Distro.MajorVersion())
+	canCompareVersion := err == nil
+	distroMinorVersion, err := strconv.Atoi(p.Distro.MinorVersion())
+	canCompareVersion = canCompareVersion && err == nil
+
 	var results []match.Match
 	for id, vuln := range disclosureVulnsByCVE {
 		advisory, hasAdvisory := advisoryVulnsByCVE[id]
+		vulnerable := true
 		if hasAdvisory {
 			if advisory.Constraint != nil {
-				vulnerable, err := advisory.Constraint.Satisfied(verObj)
+				sat, err := advisory.Constraint.Satisfied(verObj)
 				if err != nil {
 					return nil, nil, err
 				}
-				if !vulnerable {
+				if !sat {
+					vulnerable = false
+				}
+			}
+		}
+
+		// Check whether there was a fix in RHEL main before this version of EUS was released
+
+		for _, fixVersion := range advisory.Fix.Versions {
+			if !canCompareVersion {
+				continue
+			}
+			if fixVersion == "" {
+				continue
+			}
+			// regex rhel major and minor versions from fixVersion,
+			// which is a string like 0:4.18.0-513.9.1.el8_9
+			major, minor, err := extractRhelVersion(fixVersion)
+			if err != nil {
+				continue // if a rhel minor version can't be extracted, assume the fix is not applicable
+			}
+
+			if major == distroMajorVersion && minor <= distroMinorVersion {
+				sat, err := vuln.Constraint.Satisfied(verObj)
+				if err != nil {
 					continue
+				}
+				if !sat {
+					vulnerable = false
 				}
 			}
 		}
 		// we are vulnerable unless there's an advisory with a constraint that's satisfied
-		results = append(results, match.Match{
-			Vulnerability: vuln,
-			Package:       p,
-			Details:       []match.Detail{
-				// TODO: some details please
-			},
-		})
+		if vulnerable {
+			results = append(results, match.Match{
+				Vulnerability: vuln,
+				Package:       p,
+				Details: []match.Detail{
+					// TODO: some details please
+				},
+			})
+		}
 
 	}
 	return results, nil, nil
+}
+
+// Pre-compile the regular expression for efficiency.
+var rhelVersionRegex = regexp.MustCompile(`el(\d+)_(\d+)`)
+
+// errRhelPatternNotFound is returned when the "el<major>_<minor>" pattern isn't found.
+// Define it here or ensure it's defined elsewhere in your package.
+var errRhelPatternNotFound = errors.New("RHEL version pattern (elX_Y) not found in string")
+
+// extractRhelVersion attempts to find and parse the RHEL major and minor version
+// from an RPM version string.
+// Returns (0, 0, errRhelPatternNotFound) if the pattern is not found.
+// Returns (0, 0, err) if the captured numbers cannot be parsed as integers.
+func extractRhelVersion(rpmVersion string) (major int, minor int, err error) {
+	matches := rhelVersionRegex.FindStringSubmatch(rpmVersion)
+
+	if len(matches) != 3 {
+		return 0, 0, errRhelPatternNotFound
+	}
+
+	majorStr := matches[1]
+	minorStr := matches[2]
+
+	major, err = strconv.Atoi(majorStr)
+	if err != nil {
+		// Optional: wrap error for more context (requires "fmt" import)
+		// return 0, 0, fmt.Errorf("failed to parse major version '%s': %w", majorStr, err)
+		return 0, 0, err // Simpler return if fmt isn't available/desired
+	}
+
+	minor, err = strconv.Atoi(minorStr)
+	if err != nil {
+		// Optional: wrap error for more context (requires "fmt" import)
+		// return 0, 0, fmt.Errorf("failed to parse minor version '%s': %w", minorStr, err)
+		return 0, 0, err // Simpler return if fmt isn't available/desired
+	}
+
+	return major, minor, nil
 }
