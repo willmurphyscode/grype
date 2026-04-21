@@ -11,6 +11,16 @@ vars:
   CHANGELOG: CHANGELOG.md
   NEXT_VERSION: VERSION
 
+  # dev-time helpers for working on vunnel providers and the db-builder subcommands.
+  # override VUNNEL_PATH on the command line (e.g. `task vunnel:units VUNNEL_PATH=/abs/path`)
+  # if your sibling checkout is not at ../vunnel.
+  VUNNEL_PATH: '{{ default "../vunnel" .VUNNEL_PATH }}'
+  VUNNEL_DEV_IMAGE: grype-dev/vunnel:local
+  DB_BUILDER_CACHE_DIR: '{{ .PROJECT_ROOT }}/.cache'
+  DB_BUILDER_DATA_DIR: '{{ .PROJECT_ROOT }}/.cache/vunnel'
+  DB_BUILDER_BUILD_DIR: '{{ .PROJECT_ROOT }}/.cache/grype-db-build'
+  GRYPE_DB_DATA_IMAGE: ghcr.io/anchore/grype-db/data
+
   # used for snapshot builds
   OS:
     sh: uname -s | tr '[:upper:]' '[:lower:]'
@@ -469,6 +479,83 @@ tasks:
           echo "Test configuration valid"
         fi'
 
+
+  ## Vunnel dev tasks #################################
+  ## Build and exercise a local vunnel image without any Python/uv setup on the host.
+
+  vunnel:build-image:
+    desc: Build a local vunnel docker image from $VUNNEL_PATH (no uv required)
+    cmds:
+      - |
+        test -d "{{ .VUNNEL_PATH }}" || { echo "VUNNEL_PATH={{ .VUNNEL_PATH }} not found"; exit 1; }
+        docker build -f test/dev/vunnel.Dockerfile -t {{ .VUNNEL_DEV_IMAGE }} "{{ .VUNNEL_PATH }}"
+
+  vunnel:units:
+    desc: Run vunnel pytest suite inside the dev image with bind-mounted source
+    deps: [vunnel:build-image]
+    cmds:
+      - |
+        src="$(cd '{{ .VUNNEL_PATH }}' && pwd)"
+        docker run --rm -t \
+          --entrypoint "" \
+          -v "$src:/src" \
+          -w /src \
+          {{ .VUNNEL_DEV_IMAGE }} \
+          sh -c "pip install --no-cache-dir --no-deps pytest pytest-snapshot pytest-mock pytest-unordered pytest-sugar pytest-clarity pytest-cov pytest-picked pytest-xdist jsonschema && pytest tests/unit/"
+
+  ## DB-builder dev tasks #############################
+  ## Pull provider cache, run vunnel, build a DB, and import it — all using the local grype code.
+
+  db-builder:pull-cache:
+    desc: 'Download prebuilt provider cache via oras + cache restore (PROVIDERS="nvd alpine" DATE=latest)'
+    deps: [tools]
+    vars:
+      PROVIDERS: '{{ default "" .PROVIDERS }}'
+      DATE: '{{ default "latest" .DATE }}'
+    cmds:
+      - |
+        test -n "{{ .PROVIDERS }}" || { echo "PROVIDERS must be set, e.g. PROVIDERS=\"nvd alpine\""; exit 1; }
+      - mkdir -p "{{ .DB_BUILDER_DATA_DIR }}"
+      - |
+        for p in {{ .PROVIDERS }}; do
+          echo ">>> pulling provider cache: $p"
+          tmpdir=$(mktemp -d)
+          ( cd "$tmpdir" && "{{ .TOOL_DIR }}/oras" pull {{ .GRYPE_DB_DATA_IMAGE }}/$p:{{ .DATE }} ) || { rm -rf "$tmpdir"; echo "oras pull failed for $p"; exit 1; }
+          go run ./cmd/grype db-builder cache restore \
+            --path "$tmpdir/grype-db-cache.tar.gz" \
+            -p "$p"
+          rm -rf "$tmpdir"
+        done
+
+  db-builder:pull:
+    desc: 'Run grype db-builder pull for PROVIDERS using the dev vunnel image'
+    deps: [vunnel:build-image]
+    vars:
+      PROVIDERS: '{{ default "" .PROVIDERS }}'
+    env:
+      GRYPE_DB_BUILDER_PROVIDER_ROOT: '{{ .DB_BUILDER_DATA_DIR }}'
+      GRYPE_DB_BUILDER_PROVIDER_VUNNEL_DOCKER_IMAGE: 'grype-dev/vunnel'
+      GRYPE_DB_BUILDER_PROVIDER_VUNNEL_DOCKER_TAG: 'local'
+    cmds:
+      - |
+        test -n "{{ .PROVIDERS }}" || { echo "PROVIDERS must be set, e.g. PROVIDERS=\"alpine\""; exit 1; }
+      - mkdir -p "{{ .DB_BUILDER_DATA_DIR }}"
+      - |
+        flags=""
+        for p in {{ .PROVIDERS }}; do flags="$flags -p $p"; done
+        go run ./cmd/grype db-builder pull -g $flags
+
+  db-builder:build-and-import:
+    desc: 'Build a SQLite DB from the cache and import it into the user''s grype install'
+    env:
+      GRYPE_DB_BUILDER_PROVIDER_ROOT: '{{ .DB_BUILDER_DATA_DIR }}'
+      GRYPE_DB_BUILDER_BUILD_DIR: '{{ .DB_BUILDER_BUILD_DIR }}'
+    cmds:
+      - mkdir -p "{{ .DB_BUILDER_BUILD_DIR }}"
+      - go run ./cmd/grype db-builder build -d "{{ .DB_BUILDER_BUILD_DIR }}"
+      # curator.Import() accepts a .db file, an archive, or a URL — NOT a bare
+      # directory — so we feed it the raw SQLite file.
+      - go run ./cmd/grype db import "{{ .DB_BUILDER_BUILD_DIR }}/vulnerability.db"
 
   ## Cleanup targets #################################
 

@@ -102,6 +102,14 @@ tools:
     with:
       repo: cli/cli
 
+  # used by `task db-builder:pull-cache` to fetch prebuilt provider data archives from ghcr
+  - name: oras
+    version:
+      want: v1.3.1
+    method: github-release
+    with:
+      repo: oras-project/oras
+
   # used for integration tests
   - name: skopeo
     version:
