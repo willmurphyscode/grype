@@ -79,7 +79,10 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-require github.com/bmatcuk/doublestar/v4 v4.10.0
+require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
+	golang.org/x/sync v0.20.0
+)
 
 require (
 	cel.dev/expr v0.25.1 // indirect
@@ -326,7 +329,6 @@ require (
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
