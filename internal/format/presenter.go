@@ -6,6 +6,7 @@ import (
 	"github.com/anchore/grype/grype/presenter/cyclonedx"
 	"github.com/anchore/grype/grype/presenter/json"
 	"github.com/anchore/grype/grype/presenter/models"
+	"github.com/anchore/grype/grype/presenter/openvex"
 	"github.com/anchore/grype/grype/presenter/sarif"
 	"github.com/anchore/grype/grype/presenter/table"
 	"github.com/anchore/grype/grype/presenter/template"
@@ -37,6 +38,8 @@ func GetPresenter(format Format, c PresentationConfig, pb models.PresenterConfig
 		return cyclonedx.NewXMLPresenter(pb)
 	case SarifFormat:
 		return sarif.NewPresenter(pb)
+	case OpenVEXFormat:
+		return openvex.NewPresenter(pb)
 	case TemplateFormat:
 		return template.NewPresenter(pb, c.TemplateFilePath)
 	// DEPRECATED TODO: remove in v1.0
