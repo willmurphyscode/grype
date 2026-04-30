@@ -491,17 +491,52 @@ tasks:
         docker build -f test/dev/vunnel.Dockerfile -t {{ .VUNNEL_DEV_IMAGE }} "{{ .VUNNEL_PATH }}"
 
   vunnel:units:
-    desc: Run vunnel pytest suite inside the dev image with bind-mounted source
+    desc: Run vunnel's `make unit` (== `task unit`) inside the dev image
     deps: [vunnel:build-image]
     cmds:
+      - task: vunnel:run
+        vars: { TARGET: unit }
+
+  vunnel:lint:
+    desc: Run vunnel's `make lint` (== `task lint`) inside the dev image
+    deps: [vunnel:build-image]
+    cmds:
+      - task: vunnel:run
+        vars: { TARGET: lint }
+
+  vunnel:format:
+    desc: Run vunnel's `make format` (== `task format`) inside the dev image
+    deps: [vunnel:build-image]
+    cmds:
+      - task: vunnel:run
+        vars: { TARGET: format }
+
+  vunnel:check-types:
+    desc: Run vunnel's `make check-types` (== `task check-types`) inside the dev image
+    deps: [vunnel:build-image]
+    cmds:
+      - task: vunnel:run
+        vars: { TARGET: check-types }
+
+  vunnel:run:
+    internal: true
+    # Invoke a vunnel Makefile target inside the dev image with the host
+    # checkout bind-mounted at /src. The `-v /src/.tool` declares an
+    # anonymous volume that masks the host's .tool/ (which is host-arch and
+    # would crash inside the linux container with "Exec format error"); the
+    # `with-tools` entrypoint then seeds /src/.tool from the linux toolchain
+    # baked into the image at /opt/vunnel-tool.
+    cmds:
       - |
+        test -n "{{ .TARGET }}" || { echo "TARGET must be set"; exit 1; }
         src="$(cd '{{ .VUNNEL_PATH }}' && pwd)"
         docker run --rm -t \
-          --entrypoint "" \
+          --entrypoint with-tools \
           -v "$src:/src" \
+          -v /src/.tool \
           -w /src \
           {{ .VUNNEL_DEV_IMAGE }} \
-          sh -c "pip install --no-cache-dir --no-deps pytest pytest-snapshot pytest-mock pytest-unordered pytest-sugar pytest-clarity pytest-cov pytest-picked pytest-xdist jsonschema && pytest tests/unit/"
+          make {{ .TARGET }}
 
   ## DB-builder dev tasks #############################
   ## Pull provider cache, run vunnel, build a DB, and import it — all using the local grype code.

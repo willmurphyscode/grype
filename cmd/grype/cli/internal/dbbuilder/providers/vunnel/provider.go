@@ -19,6 +19,17 @@ import (
 
 const Kind provider.Kind = "vunnel" // special case of external
 
+// Executor names the runtime backend used to invoke vunnel for a provider.
+// The default (docker) is the local-dev path: developers only need docker on
+// the host and can iterate on a vunnel provider without uv/Python installed.
+// Production paths can pick local (vunnel binary on PATH) once the host is
+// guaranteed to have vunnel available.
+const (
+	ExecutorDocker = "docker"
+	ExecutorPodman = "podman"
+	ExecutorLocal  = "local"
+)
+
 type Config struct {
 	Config           string            `yaml:"config" json:"config" mapstructure:"config"`
 	Executor         string            `yaml:"executor" json:"executor" mapstructure:"executor"`
@@ -41,7 +52,7 @@ func NewProvider(root string, id provider.Identifier, cfg Config) provider.Reade
 
 func getRunCommand(root string, id provider.Identifier, cfg Config) string {
 	switch cfg.Executor {
-	case "docker", "podman":
+	case ExecutorDocker, ExecutorPodman:
 		dataRootCtr := root
 		if !strings.HasPrefix(root, "/") {
 			dataRootCtr = strings.TrimPrefix(root, "./")
@@ -88,7 +99,7 @@ func getRunCommand(root string, id provider.Identifier, cfg Config) string {
 
 func getListCommand(root string, cfg Config) string {
 	switch cfg.Executor {
-	case "docker", "podman":
+	case ExecutorDocker, ExecutorPodman:
 		dataRootCtr := root
 		if !strings.HasPrefix(root, "/") {
 			dataRootCtr = strings.TrimPrefix(root, "./")

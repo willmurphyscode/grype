@@ -1,0 +1,23 @@
+# Sibling .dockerignore for test/dev/vunnel.Dockerfile.
+#
+# When this Dockerfile is built with $VUNNEL_PATH as the context (so the
+# COPY . /src step sees the vunnel source tree), Docker's default lookup
+# would otherwise pick vunnel's repo-local .dockerignore — which is tuned for
+# the release image and excludes everything except /dist. That would leave us
+# with no source to install. BuildKit picks the <Dockerfile-name>.dockerignore
+# in the same directory as the Dockerfile when -f is used, so this file wins.
+#
+# We allow source by default and only exclude caches / local state that would
+# bloat the image without affecting the install.
+.git/
+.venv/
+.cache/
+.pytest_cache/
+.ruff_cache/
+.tool/
+build/
+dist/
+htmlcov/
+data/
+*.pyc
+__pycache__/
