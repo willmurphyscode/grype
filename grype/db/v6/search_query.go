@@ -216,21 +216,21 @@ func (b *searchQueryBuilder) Build() (*searchQuery, []vulnerability.Criteria, er
 	return b.query, b.remainingCriteria, nil
 }
 
-// applyUnaffectedOSStrictness disables the v6 OS-store cross-version fallback
-// for unaffected/NAK lookups. The fallback (exact major.minor → major-only →
-// any minor with this major) is appropriate for disclosures: a CVE in
-// sles:15.6 likely persists into sles:15.7 unless explicitly fixed. But NAKs
-// are positive vendor statements ("we analyzed and confirmed not affected") -
-// SUSE may not have re-analyzed for SP7, and silently extending a 15.6 NAK
-// to a 15.7 scan can falsely suppress a real GHSA finding on the bundled
-// language-ecosystem package. Strict-by-default avoids that class of false
-// negative; tests on non-minor-versioned distros (rhel, debian, ubuntu) are
-// unaffected because their unaffected records already use exact matches.
+// applyUnaffectedOSStrictness blocks the loose "major-with-any-minor"
+// fallback for unaffected/NAK lookups while preserving the major-only-empty-
+// minor fallback. A NAK in sles:15.6 must NOT apply to a sles:15.7 scan
+// (SUSE may not have re-analyzed for SP7, and silently extending the NAK
+// would falsely suppress a real GHSA finding on the bundled language-
+// ecosystem package). But a NAK in rhel:8 (publisher intentionally less-
+// specific - the entire major is unaffected) MUST still apply to a rhel:8.4
+// scan, since RHEL OVAL publishes most NAKs at major granularity. The
+// disclosure path is unchanged - cross-minor leakage is fine for "this CVE
+// affects rhel 8" → applies to all 8.x.
 //
 // Skips the AnyOSSpecified / NoOSSpecified package-level singletons - those
 // are shared globals (see package_store.go) used by setDefaultOS, and
-// mutating them here would leak DisableFallback=true onto every subsequent
-// query in the process.
+// mutating them here would leak the flag onto every subsequent query in
+// the process.
 func (b *searchQueryBuilder) applyUnaffectedOSStrictness() {
 	if !b.query.unaffectedOnly {
 		return
@@ -239,6 +239,6 @@ func (b *searchQueryBuilder) applyUnaffectedOSStrictness() {
 		if spec == nil || spec == AnyOSSpecified || spec == NoOSSpecified {
 			continue
 		}
-		spec.DisableFallback = true
+		spec.DisableCrossMinorFallback = true
 	}
 }

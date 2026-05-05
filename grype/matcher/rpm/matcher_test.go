@@ -276,6 +276,41 @@ func TestMatcherRpm_UnaffectedRecordProducesIgnore(t *testing.T) {
 		})
 }
 
+// TestMatcherRpm_MajorOnlyUnaffectedRecordAppliesToMinorScan locks in the
+// half of the strict-NAK design that's easy to accidentally regress: a NAK
+// record published at major-version granularity (rhel:8, with empty minor)
+// must still apply when the scan specifies a minor (rhel 8.4). RHEL OVAL
+// publishes nearly all of its NAKs this way, so without this fallback every
+// RHEL NAK would silently drop once a user runs grype on a minor-versioned
+// distro - the opposite of what the unaffected work is trying to achieve.
+//
+// Companion to TestMatcherRpm_SLES_NAKDoesNotCrossMinorVersion in
+// sles_test.go: that one proves a sibling-minor NAK does NOT leak across
+// minors (publisher said something specific about SP6, not SP7); this one
+// proves an intentionally-less-specific (major-only) NAK DOES still apply.
+// Together they bracket applyUnaffectedOSStrictness in v6/search_query.go.
+//
+// Uses the same rhel8/glibc/CVE-1999-0199 NAK as the non-minor test above
+// but scans with distro.New(RedHat, "8.4", "") to exercise the
+// major-empty-minor fallback path through the v6 OS store.
+func TestMatcherRpm_MajorOnlyUnaffectedRecordAppliesToMinorScan(t *testing.T) {
+	dbtest.DBs(t, "rhel8").
+		SelectOnly("rhel:8/cve-1999-0199").
+		Run(func(t *testing.T, db *dbtest.DB) {
+			matcher := Matcher{}
+			pkgID := pkg.ID("glibc-on-8.4")
+			p := dbtest.NewPackage("glibc", "2.28-100.el8", syftPkg.RpmPkg).
+				WithID(pkgID).
+				WithDistro(distro.New(distro.RedHat, "8.4", "")).
+				Build()
+
+			db.Match(t, &matcher, p).Ignores().
+				SelectRelatedPackageIgnore(IgnoreReasonDistroNotVulnerable, "CVE-1999-0199").
+				ForPackage(pkgID).
+				WithRelationshipType(artifact.OwnershipByFileOverlapRelationship)
+		})
+}
+
 // TestMatcherRpm_VulnerableAndUnaffectedInSameCall verifies that the standard
 // matcher can produce a match and an Unaffected ignore for the same package
 // in a single Match() call. CVE-2016-10228 has a real glibc fix at
