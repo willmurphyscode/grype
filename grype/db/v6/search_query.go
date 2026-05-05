@@ -211,6 +211,34 @@ func (b *searchQueryBuilder) Build() (*searchQuery, []vulnerability.Criteria, er
 	b.setDefaultOS()
 	b.normalizePackageName()
 	b.extractVersionMatcher()
+	b.applyUnaffectedOSStrictness()
 
 	return b.query, b.remainingCriteria, nil
+}
+
+// applyUnaffectedOSStrictness disables the v6 OS-store cross-version fallback
+// for unaffected/NAK lookups. The fallback (exact major.minor → major-only →
+// any minor with this major) is appropriate for disclosures: a CVE in
+// sles:15.6 likely persists into sles:15.7 unless explicitly fixed. But NAKs
+// are positive vendor statements ("we analyzed and confirmed not affected") -
+// SUSE may not have re-analyzed for SP7, and silently extending a 15.6 NAK
+// to a 15.7 scan can falsely suppress a real GHSA finding on the bundled
+// language-ecosystem package. Strict-by-default avoids that class of false
+// negative; tests on non-minor-versioned distros (rhel, debian, ubuntu) are
+// unaffected because their unaffected records already use exact matches.
+//
+// Skips the AnyOSSpecified / NoOSSpecified package-level singletons - those
+// are shared globals (see package_store.go) used by setDefaultOS, and
+// mutating them here would leak DisableFallback=true onto every subsequent
+// query in the process.
+func (b *searchQueryBuilder) applyUnaffectedOSStrictness() {
+	if !b.query.unaffectedOnly {
+		return
+	}
+	for _, spec := range b.query.osSpecs {
+		if spec == nil || spec == AnyOSSpecified || spec == NoOSSpecified {
+			continue
+		}
+		spec.DisableFallback = true
+	}
 }

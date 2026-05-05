@@ -1,0 +1,14 @@
+auto-generate: false
+extractions:
+    sles:
+        # CVE-2024-26130: real python311-cryptography vulnerability extracted from
+        # the SUSE OVAL feed (Version="0:41.0.3-150600.23.3.1", normal RPM fix).
+        # Used as the "vulnerable" half of the NAK + vulnerable in-same-call test.
+        - sles:15.6/cve-2024-26130
+        # CVE-2026-34073: synthetic NAK record - mirrors the shape vunnel will
+        # emit for SUSE OVAL "<pkg> is not affected" criteria once the SLES NAK
+        # parser feature lands. Pinned manually because this PR is what teaches
+        # vunnel to emit Version="0" FixedIn entries for SLES; not present in
+        # upstream caches yet. Re-extract once the feature is released and the
+        # SUSE OVAL feed has a real not-affected entry on python311-cryptography.
+        - sles:15.6/cve-2026-34073
