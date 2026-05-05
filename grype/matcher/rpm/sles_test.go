@@ -17,26 +17,27 @@ import (
 // v6 OS transformer turns into UnaffectedPackageHandle rows. The matcher's
 // search.ForUnaffected() branch picks them up and emits a "Distro Not
 // Vulnerable" IgnoreRelatedPackage filter so consumers can suppress related-
-// package matches (the canonical case: a GHSA on the bundled PyPI
-// cryptography that overlaps python311-cryptography by file ownership).
+// package matches (the canonical case: a GHSA on the bundled PyPI Werkzeug
+// that overlaps python311-Werkzeug by file ownership).
 //
 // This is the SLES counterpart to TestMatcherRpm_UnaffectedRecordProducesIgnore
-// (rhel:8/glibc/CVE-1999-0199). The CVE id used here is the synthetic one
-// from vunnel's own SLES NAK test fixture - the real SUSE OVAL feed has
-// not yet been re-run with the SLES NAK feature.
+// (rhel:8/glibc/CVE-1999-0199). CVE-2024-49766 is the exact CVE from issue
+// #2566; SUSE marks both python3-Werkzeug and python311-Werkzeug as not
+// affected on SLES 15.6 in the OVAL feed.
 func TestMatcherRpm_SLES_UnaffectedRecordProducesIgnore(t *testing.T) {
 	dbtest.DBs(t, "sles15").
-		SelectOnly("sles:15.6/cve-2026-34073").
+		SelectOnly("sles:15.6/cve-2024-49766").
 		Run(func(t *testing.T, db *dbtest.DB) {
 			matcher := Matcher{}
-			pkgID := pkg.ID("python311-cryptography-unaffected")
-			p := dbtest.NewPackage("python311-cryptography", "0:41.0.3-150600.23.3.1", syftPkg.RpmPkg).
+			pkgID := pkg.ID("python311-Werkzeug-unaffected")
+			// the user's reported version from issue #2566
+			p := dbtest.NewPackage("python311-Werkzeug", "0:2.3.6-150400.6.12.1", syftPkg.RpmPkg).
 				WithID(pkgID).
 				WithDistro(dbtest.SLES156).
 				Build()
 
 			db.Match(t, &matcher, p).Ignores().
-				SelectRelatedPackageIgnore(IgnoreReasonDistroNotVulnerable, "CVE-2026-34073").
+				SelectRelatedPackageIgnore(IgnoreReasonDistroNotVulnerable, "CVE-2024-49766").
 				ForPackage(pkgID).
 				WithRelationshipType(artifact.OwnershipByFileOverlapRelationship)
 		})
@@ -44,12 +45,12 @@ func TestMatcherRpm_SLES_UnaffectedRecordProducesIgnore(t *testing.T) {
 
 // TestMatcherRpm_SLES_VulnerableAndUnaffectedInSameCall verifies that the
 // standard matcher correctly disentangles disclosure-side and unaffected-side
-// results for the same package on SLES, in a single Match() call. CVE-2024-26130
-// has a real SUSE fix at 0:41.0.3-150600.23.3.1 - the package version 39.0.0
-// is below the fix and matches. CVE-2026-34073 is the NAK (FixedIn Version="0"
-// → UnaffectedPackageHandle), which produces a "Distro Not Vulnerable" ignore.
-// Both records are on python311-cryptography in sles:15.6, so the matcher must
-// produce one match AND one ignore from the same package query.
+// results for the same package on SLES, in a single Match() call.
+// CVE-2023-25577 has a real SUSE fix at 0:2.3.6-150400.6.6.1 - a package at
+// 0:2.3.0 is below the fix and matches. CVE-2024-49766 is the NAK (FixedIn
+// Version="0" → UnaffectedPackageHandle), which produces a "Distro Not
+// Vulnerable" ignore. Both records are on python311-Werkzeug in sles:15.6,
+// so the matcher must produce one match AND one ignore from the same query.
 //
 // This is the SLES counterpart to TestMatcherRpm_VulnerableAndUnaffectedInSameCall
 // (rhel:8/glibc/CVE-2016-10228 + CVE-1999-0199); proves the two-path split in
@@ -57,19 +58,19 @@ func TestMatcherRpm_SLES_UnaffectedRecordProducesIgnore(t *testing.T) {
 func TestMatcherRpm_SLES_VulnerableAndUnaffectedInSameCall(t *testing.T) {
 	dbtest.DBs(t, "sles15").Run(func(t *testing.T, db *dbtest.DB) {
 		matcher := Matcher{}
-		pkgID := pkg.ID("python311-cryptography-mixed")
-		// 39.0.0 is below the SUSE fix at 41.0.3 → vulnerable for CVE-2024-26130
-		p := dbtest.NewPackage("python311-cryptography", "0:39.0.0-150600.5.1", syftPkg.RpmPkg).
+		pkgID := pkg.ID("python311-Werkzeug-mixed")
+		// 2.3.0 is below the SUSE fix at 2.3.6 → vulnerable for CVE-2023-25577
+		p := dbtest.NewPackage("python311-Werkzeug", "0:2.3.0-150400.6.1.1", syftPkg.RpmPkg).
 			WithID(pkgID).
 			WithDistro(dbtest.SLES156).
 			Build()
 
 		findings := db.Match(t, &matcher, p)
-		findings.SelectMatch("CVE-2024-26130").
+		findings.SelectMatch("CVE-2023-25577").
 			SelectDetailByType(match.ExactDirectMatch).
 			AsDistroSearch()
 		findings.Ignores().
-			SelectRelatedPackageIgnore(IgnoreReasonDistroNotVulnerable, "CVE-2026-34073").
+			SelectRelatedPackageIgnore(IgnoreReasonDistroNotVulnerable, "CVE-2024-49766").
 			ForPackage(pkgID).
 			WithRelationshipType(artifact.OwnershipByFileOverlapRelationship)
 	})
@@ -88,11 +89,11 @@ func TestMatcherRpm_SLES_VulnerableAndUnaffectedInSameCall(t *testing.T) {
 // applyUnaffectedOSStrictness in grype/db/v6/search_query.go.
 func TestMatcherRpm_SLES_NAKDoesNotCrossMinorVersion(t *testing.T) {
 	dbtest.DBs(t, "sles15").
-		SelectOnly("sles:15.6/cve-2026-34073").
+		SelectOnly("sles:15.6/cve-2024-49766").
 		Run(func(t *testing.T, db *dbtest.DB) {
 			matcher := Matcher{}
 			// same package as the NAK, but on sles:15.7 (the NAK lives in sles:15.6)
-			p := dbtest.NewPackage("python311-cryptography", "0:41.0.3-150700.23.3.1", syftPkg.RpmPkg).
+			p := dbtest.NewPackage("python311-Werkzeug", "0:2.3.6-150700.6.12.1", syftPkg.RpmPkg).
 				WithDistro(distro.New(distro.SLES, "15.7", "")).
 				Build()
 
