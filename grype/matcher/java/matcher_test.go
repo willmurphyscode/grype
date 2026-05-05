@@ -221,6 +221,141 @@ func TestMatcherJava_ChainguardLibrariesSuppressesUpstreamGhsa(t *testing.T) {
 		})
 }
 
+// TestMatcherJava_ChainguardLibrariesSuppressesH2MultiCVE is the strongest
+// real-data exercise of the openvex name-resolution contract. The h2
+// 1.4.200-0.cgr.3 rebuild sits inside the vulnerable range of *three*
+// independent upstream GHSAs, each backported by Chainguard:
+//
+//   - CVE-2022-23221 / GHSA-45hx-wfhj-473x  (range "< 2.1.210")          via CGA-3xh4-h5vj-xr3v
+//   - CVE-2021-42392 / GHSA-h376-j262-vhq6  (range ">= 1.1.100 < 2.0.206") via CGA-8vm3-q87f-pm4w
+//   - CVE-2022-45868 / GHSA-22wj-vf5f-wrvj  (range ">= 1.4.198 < 2.2.220") via CGA-94pc-5gc9-pxrj
+//
+// Unlike the spring-security 5.8.16-0.cgr.1 fixture - where the upstream
+// GHSA closes at 5.8.16 and the cgr suffix lifts the rebuild past the
+// upper bound under the masahiro331/go-mvn-version comparator, so the
+// GHSA range alone clears the package - all three h2 ranges are
+// open-ended on the upper side. The cgr suffix cannot accidentally save
+// the package; only a correctly-keyed openvex unaffected handle can.
+// That makes this test the canonical regression for the
+// packageNameFromPURL change: revert it to plain purl.Name and the
+// openvex side stores "h2" while the github side stores
+// "com.h2database:h2", the ignore rules vanish, and all three CVEs fire
+// on the rebuilt artifact.
+func TestMatcherJava_ChainguardLibrariesSuppressesH2MultiCVE(t *testing.T) {
+	const unaffectedRule = "UnaffectedPackageEntry"
+	type cgaCase struct {
+		cga, cve, ghsa string
+	}
+	cases := []cgaCase{
+		{"CGA-3xh4-h5vj-xr3v", "CVE-2022-23221", "GHSA-45hx-wfhj-473x"},
+		{"CGA-8vm3-q87f-pm4w", "CVE-2021-42392", "GHSA-h376-j262-vhq6"},
+		{"CGA-94pc-5gc9-pxrj", "CVE-2022-45868", "GHSA-22wj-vf5f-wrvj"},
+	}
+
+	mk := func(version string) pkg.Package {
+		return dbtest.NewPackage("com.h2database.h2", version, syftPkg.JavaPkg).
+			WithLanguage(syftPkg.Java).
+			WithMetadata(pkg.JavaMetadata{
+				PomArtifactID: "h2",
+				PomGroupID:    "com.h2database",
+			}).
+			Build()
+	}
+
+	dbtest.DBs(t, "h2-and-vex").
+		Run(func(t *testing.T, db *dbtest.DB) {
+			matcher := NewJavaMatcher(MatcherConfig{})
+
+			t.Run("vanilla 1.4.200 fires on all three upstream GHSAs", func(t *testing.T) {
+				findings := db.Match(t, matcher, mk("1.4.200"))
+				for _, c := range cases {
+					findings.SelectMatch(c.ghsa).
+						SelectDetailByType(match.ExactDirectMatch).
+						AsEcosystemSearch()
+				}
+			})
+
+			t.Run("chainguard rebuild 1.4.200-0.cgr.3 drops all three GHSAs and emits VEX-style ignore rules", func(t *testing.T) {
+				const cgrVersion = "1.4.200-0.cgr.3"
+				findings := db.Match(t, matcher, mk(cgrVersion))
+				ignores := findings.Ignores()
+				for _, c := range cases {
+					for _, id := range []string{c.cga, c.cve, c.ghsa} {
+						ignores.SelectIgnoreRule(unaffectedRule, id).
+							ForPackage("com.h2database.h2", cgrVersion).
+							IncludesAliases()
+					}
+				}
+			})
+
+			t.Run("h2 past all three upstream fixes is clean - no match, no ignore", func(t *testing.T) {
+				// 2.2.220 is past every upper bound in the fixture
+				// (>= 2.1.210, >= 2.0.206, >= 2.2.220).
+				db.Match(t, matcher, mk("2.2.220")).IsEmpty()
+			})
+		})
+}
+
+// TestMatcherJava_ChainguardLibrariesSuppressesSpringCore covers a
+// recent (2025) Spring CVE that lives mid-range on the 5.3 LTS line:
+// CVE-2025-41249 / GHSA-jmp9-x22r-554x has range ">= 5.3.0 <= 5.3.44"
+// and Chainguard backported the fix into 5.3.39-0.cgr.4 (CGA-fq9v-559q-9mxv).
+// Both 5.3.39 (vanilla) and 5.3.39-0.cgr.4 (rebuild) are inside the
+// upstream range, so the GHSA alone can not clear the rebuild - the
+// openvex unaffected handle must be keyed under
+// "org.springframework:spring-core" to suppress it. This complements
+// the h2 multi-CVE case with a single-CVE Spring scenario on a more
+// recent advisory.
+func TestMatcherJava_ChainguardLibrariesSuppressesSpringCore(t *testing.T) {
+	const (
+		chainguardCGA  = "CGA-fq9v-559q-9mxv"
+		upstreamCVE    = "CVE-2025-41249"
+		upstreamGHSA   = "GHSA-jmp9-x22r-554x"
+		unaffectedRule = "UnaffectedPackageEntry"
+	)
+
+	mk := func(version string) pkg.Package {
+		return dbtest.NewPackage("org.springframework.spring-core", version, syftPkg.JavaPkg).
+			WithLanguage(syftPkg.Java).
+			WithMetadata(pkg.JavaMetadata{
+				PomArtifactID: "spring-core",
+				PomGroupID:    "org.springframework",
+			}).
+			Build()
+	}
+
+	dbtest.DBs(t, "spring-core-and-vex").
+		Run(func(t *testing.T, db *dbtest.DB) {
+			matcher := NewJavaMatcher(MatcherConfig{})
+
+			t.Run("vanilla 5.3.39 still matches the upstream GHSA", func(t *testing.T) {
+				db.Match(t, matcher, mk("5.3.39")).
+					SelectMatch(upstreamGHSA).
+					SelectDetailByType(match.ExactDirectMatch).
+					AsEcosystemSearch()
+			})
+
+			t.Run("chainguard rebuild 5.3.39-0.cgr.4 drops the GHSA and emits VEX-style ignore rules", func(t *testing.T) {
+				const cgrVersion = "5.3.39-0.cgr.4"
+				findings := db.Match(t, matcher, mk(cgrVersion))
+				ignores := findings.Ignores()
+				ignores.SelectIgnoreRule(unaffectedRule, chainguardCGA).
+					ForPackage("org.springframework.spring-core", cgrVersion).
+					IncludesAliases()
+				ignores.SelectIgnoreRule(unaffectedRule, upstreamCVE).
+					ForPackage("org.springframework.spring-core", cgrVersion).
+					IncludesAliases()
+				ignores.SelectIgnoreRule(unaffectedRule, upstreamGHSA).
+					ForPackage("org.springframework.spring-core", cgrVersion).
+					IncludesAliases()
+			})
+
+			t.Run("spring-core past upstream fix is clean - no match, no ignore", func(t *testing.T) {
+				db.Match(t, matcher, mk("5.3.45")).IsEmpty()
+			})
+		})
+}
+
 // TestMatcherJava_shouldSearchMavenBySha is a pure helper test - it does
 // not invoke the matcher and never touches a vulnerability provider, so
 // no fixture or mock is involved.
