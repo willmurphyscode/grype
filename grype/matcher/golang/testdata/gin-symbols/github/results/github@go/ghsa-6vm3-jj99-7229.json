@@ -1,0 +1,73 @@
+{
+  "identifier": "github:go/ghsa-6vm3-jj99-7229",
+  "item": {
+    "Advisory": {
+      "CVE": [
+        "CVE-2020-36567"
+      ],
+      "CVSS": {
+        "base_metrics": {
+          "base_score": 7.5,
+          "base_severity": "High",
+          "exploitability_score": 3.9,
+          "impact_score": 3.6
+        },
+        "status": "N/A",
+        "vector_string": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N",
+        "version": "3.1"
+      },
+      "Classification": "GENERAL",
+      "FixedIn": [
+        {
+          "available": {
+            "date": "2022-12-31",
+            "kind": "first-observed"
+          },
+          "ecosystem": "go",
+          "identifier": "1.6.0",
+          "name": "github.com/gin-gonic/gin",
+          "namespace": "github:go",
+          "range": "\u003c 1.6.0"
+        }
+      ],
+      "Metadata": {
+        "CVE": [
+          "CVE-2020-36567"
+        ]
+      },
+      "Severity": "High",
+      "Summary": "Gin's default logger allows unsanitized input that can allow remote attackers to inject arbitrary log lines",
+      "cvss_severities": [
+        {
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N",
+          "version": "3.1"
+        }
+      ],
+      "ghsaId": "GHSA-6vm3-jj99-7229",
+      "namespace": "github:go",
+      "published": "2022-12-27T21:30:20Z",
+      "references": [
+        {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-36567"
+        },
+        {
+          "url": "https://github.com/gin-gonic/gin/pull/2237"
+        },
+        {
+          "url": "https://github.com/gin-gonic/gin/commit/a71af9c144f9579f6dbe945341c1df37aaf09c0d"
+        },
+        {
+          "url": "https://pkg.go.dev/vuln/GO-2020-0001"
+        },
+        {
+          "url": "https://github.com/advisories/GHSA-6vm3-jj99-7229"
+        }
+      ],
+      "updated": "2023-02-03T05:01:33Z",
+      "url": "https://github.com/advisories/GHSA-6vm3-jj99-7229",
+      "withdrawn": null
+    },
+    "Vulnerability": {}
+  },
+  "schema": "https://raw.githubusercontent.com/anchore/vunnel/main/schema/vulnerability/github-security-advisory/schema-1.0.3.json"
+}

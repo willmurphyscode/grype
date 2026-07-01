@@ -1,0 +1,15 @@
+{
+  "content_hash": "d72c955ea57040ab",
+  "created_at": "2026-07-01T18:06:05.797265649Z",
+  "regenerated_at": "2026-07-01T18:06:05.797265649Z",
+  "providers": {
+    "github": {
+      "vunnel_version": "vunnel@0.61.0.post2+a108d3c",
+      "timestamp": "2026-07-01T09:11:47.915614Z"
+    },
+    "govulndb": {
+      "vunnel_version": "vunnel@0.61.0.post2+a108d3c",
+      "timestamp": "2026-07-01T00:55:28.154133Z"
+    }
+  }
+}

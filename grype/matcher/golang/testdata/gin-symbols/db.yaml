@@ -1,0 +1,16 @@
+auto-generate: true
+extractions:
+  github:
+    # CVE-2020-36567 / GHSA-6vm3-jj99-7229: gin's default Logger middleware allows
+    # log injection. Affects github.com/gin-gonic/gin < 1.6.0 at module granularity.
+    # The advisory references https://pkg.go.dev/vuln/GO-2020-0001, whose
+    # ecosystem_specific.imports scope the vulnerability to the Logger entrypoints
+    # (Default, Logger, LoggerWithConfig, LoggerWithFormatter, LoggerWithWriter).
+    - github:go/GHSA-6vm3-jj99-7229
+  govulndb:
+    # GO-2020-0001 is gin's govulndb record; it carries the per-symbol reachability
+    # (ecosystem_specific.imports) that the db builder is expected to graft onto the
+    # GHSA above so a gin binary that never uses the Logger symbols is not flagged.
+    # govulndb only emits stdlib/golang.org/x records itself, so this contributes no
+    # match on its own today — it is here purely as the symbol source.
+    - GO-2020-0001
