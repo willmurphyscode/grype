@@ -137,3 +137,20 @@ func TestRapidFortRedHat_Matching(t *testing.T) {
 		}
 	})
 }
+
+// The rapidfort-redhat fixture has CVE-2023-38546 for curl in the el9 rows and in +fc43, but not in +fc42 or +rf.
+// RapidFort: "only evaluate events whose identifier matches the target system's stream", so neither should match.
+func TestRapidFortRedHat_StreamWithoutRecordFallsBackToEl9(t *testing.T) {
+	dbtest.DBs(t, "rapidfort-redhat").Run(func(t *testing.T, db *dbtest.DB) {
+		for _, version := range []string{"7.70.0-1.fc42", "7.70.0-1.rf"} {
+			t.Run(version, func(t *testing.T) {
+				p := dbtest.NewPackage("curl", version, syftPkg.RpmPkg).WithDistro(distro.New(distro.RapidFortRedHat, "9", "")).Build()
+				findings := db.Match(t, NewRpmMatcher(MatcherConfig{}), p).SkipCompleteness()
+				for _, m := range findings.Matches() {
+					t.Logf("matched %s from %s", m.Vulnerability.ID, m.Vulnerability.Namespace)
+				}
+				findings.DoesNotHaveAnyVulnerabilities("CVE-2023-38546")
+			})
+		}
+	})
+}

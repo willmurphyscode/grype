@@ -320,6 +320,35 @@ func TestSet_SplitVulnerable_UsesEachResultsOwnPackageVersion(t *testing.T) {
 	})
 }
 
+// The exact-fix rule must not depend on how the epoch is spelled. rpm searches add "0:" to an
+// epochless version (addEpochIfApplicable), while Amazon/RHEL fix versions are written without one
+// (e.g. ALAS2-2020-1449 fixes tomcat 7.0.76-10.amzn2.0.2).
+func TestSet_SplitVulnerable_ExactFixIgnoresEpochSpelling(t *testing.T) {
+	exactlyFixed := withAliases(rpmRecord("ALAS-A", nativeNS, "< 7.0.76-10.amzn2.0.2", "7.0.76-10.amzn2.0.2"), "CVE-SHARED")
+	otherStream := withAliases(rpmRecord("ALAS-B", nativeNS, "< 8.5.56-1.amzn2", "8.5.56-1.amzn2"), "CVE-SHARED")
+	s := func() result.Set {
+		return result.Set{"ALAS-A": {resultOf(exactlyFixed)}, "ALAS-B": {resultOf(otherStream)}}
+	}
+
+	withoutEpoch, _ := SplitVulnerable(s(), version.New("7.0.76-10.amzn2.0.2", version.RpmFormat))
+	withEpoch, _ := SplitVulnerable(s(), version.New("0:7.0.76-10.amzn2.0.2", version.RpmFormat))
+
+	require.Equal(t, keysOf(withoutEpoch), keysOf(withEpoch), "0:V and V are the same rpm version")
+}
+
+// An exact fix for one advisory must not hide another advisory whose own range covers the installed
+// version (e.g. an incomplete fix re-opened under a second advisory naming the same CVE). Synthetic
+// fixture; I did not find a real record of this shape.
+func TestSet_SplitVulnerable_ExactFixDoesNotHideCoveringRange(t *testing.T) {
+	first := withAliases(record("GHSA-1", "github:language:go", "< 1.2.0", "1.2.0"), "CVE-SHARED")
+	reopened := withAliases(record("GHSA-2", "github:language:go", ">= 1.2.0, < 1.2.3", "1.2.3"), "CVE-SHARED")
+	s := result.Set{"GHSA-1": {resultOf(first)}, "GHSA-2": {resultOf(reopened)}}
+
+	vulnerable, _ := SplitVulnerable(s, debVersion("1.2.0"))
+
+	require.Contains(t, vulnerable, "GHSA-2", "1.2.0 is inside GHSA-2's affected range")
+}
+
 // record builds one hydrated DB record: a single affected range and the fix it names, if any.
 func record(id, namespace, constraint string, fixVersions ...string) vulnerability.Vulnerability {
 	v := vulnerability.Vulnerability{
@@ -332,6 +361,13 @@ func record(id, namespace, constraint string, fixVersions ...string) vulnerabili
 	} else {
 		v.Fix = vulnerability.Fix{State: vulnerability.FixStateNotFixed}
 	}
+	return v
+}
+
+// rpmRecord is record with an rpm constraint.
+func rpmRecord(id, namespace, constraint string, fixVersions ...string) vulnerability.Vulnerability {
+	v := record(id, namespace, "< 0", fixVersions...)
+	v.Constraint = version.MustGetConstraint(constraint, version.RpmFormat)
 	return v
 }
 
@@ -362,6 +398,14 @@ func namespacesOf(s result.Set) []string {
 	var out []string
 	for _, v := range s.Vulnerabilities() {
 		out = append(out, v.Namespace)
+	}
+	return out
+}
+
+func keysOf(s result.Set) []string {
+	var out []string
+	for k := range s {
+		out = append(out, k)
 	}
 	return out
 }

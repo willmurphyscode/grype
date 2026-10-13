@@ -63,3 +63,16 @@ func TestAmazonTomcatStreams_UpstreamHitDoesNotDenyDirectFix(t *testing.T) {
 				WithRelationshipType(artifact.OwnershipByFileOverlapRelationship)
 		})
 }
+
+// An rpm with no version cannot be placed in any affected range. The rpm-local isUnknownVersion
+// treats "" as unknown; matchDistro now goes through internal.FindResultsByDistroAcrossUpstreams, which doesn't.
+func TestMatcher_EmptyVersionMatchesNothing(t *testing.T) {
+	dbtest.DBs(t, "amazon-tomcat-streams").
+		Run(func(t *testing.T, db *dbtest.DB) {
+			p := dbtest.NewPackage("tomcat", "", syftPkg.RpmPkg).
+				WithDistro(distro.New(distro.AmazonLinux, "2", "")).
+				Build()
+
+			db.Match(t, &Matcher{}, p).IsEmpty()
+		})
+}
