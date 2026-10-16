@@ -498,6 +498,12 @@ func TestMergeFix_DedupesEpochSpellings(t *testing.T) {
 		assert.Equal(t, []string{"0:0.26.4-1.fc43", "0:0.26.5-1.fc43"}, got.Versions)
 	})
 
+	t.Run("a non-zero epoch is a different build", func(t *testing.T) {
+		// "1.2-3" has an implied zero epoch, so "1:1.2-3" is a later build and both fixes must survive
+		got := mergeFix(fixed("1:1.2-3"), fixed("1.2-3"), version.RpmFormat)
+		assert.ElementsMatch(t, []string{"1:1.2-3", "1.2-3"}, got.Versions)
+	})
+
 	t.Run("an unknown format leaves the versions exactly as they arrived", func(t *testing.T) {
 		got := mergeFix(fixed("0:0.26.4-1.fc43"), fixed("0.26.4-1.fc43"), version.UnknownFormat)
 		assert.Len(t, got.Versions, 2, "never remove a version we cannot prove is a duplicate")
